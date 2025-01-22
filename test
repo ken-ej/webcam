@@ -1,0 +1,80 @@
+using System;
+using System.IO;
+using Emgu.CV;
+using Emgu.CV.CvEnum;
+using Emgu.CV.Structure;
+
+class Program
+{
+    static void Main()
+    {
+        // Configファイルから設定を読み込む
+        var configPath = "camera_config.txt";
+        int exposure = -1;
+        int focus = -1;
+
+        if (File.Exists(configPath))
+        {
+            foreach (var line in File.ReadAllLines(configPath))
+            {
+                var parts = line.Split('=');
+                if (parts.Length == 2)
+                {
+                    if (parts[0].Trim() == "Exposure") exposure = int.Parse(parts[1].Trim());
+                    if (parts[0].Trim() == "Focus") focus = int.Parse(parts[1].Trim());
+                }
+            }
+        }
+
+        // Webカメラの初期化
+        using (var capture = new VideoCapture(1, VideoCapture.API.DShow))
+        {
+            // カメラ設定（露出とフォーカス）
+            if (exposure >= 0)
+                capture.Set(CapProp.Exposure, exposure);
+            if (focus >= 0)
+                capture.Set(CapProp.Focus, focus);
+
+            Console.WriteLine("Camera initialized.");
+            Console.WriteLine("Press 'S' to save an image, or 'ESC' to exit.");
+
+            Mat frame = new Mat();
+
+            while (true)
+            {
+                // フレーム取得
+                capture.Read(frame);
+                if (frame.IsEmpty)
+                {
+                    Console.WriteLine("No frame captured. Exiting...");
+                    break;
+                }
+
+                // 画像をウィンドウに表示
+                CvInvoke.Imshow("Captured Image", frame);
+
+                // キー入力を待機
+                var key = CvInvoke.WaitKey(30); // 30ms間隔で入力をチェック
+                if (key == 27) // ESCキーで終了
+                {
+                    Console.WriteLine("Exiting...");
+                    break;
+                }
+                else if (key == 's' || key == 'S') // Sキーで画像保存
+                {
+                    var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    var saveDirectory = @"C:\CapturedImages";
+
+                    if (!Directory.Exists(saveDirectory))
+                        Directory.CreateDirectory(saveDirectory);
+
+                    var filename = Path.Combine(saveDirectory, $"image_{timestamp}.png");
+                    frame.Save(filename);
+                    Console.WriteLine($"Saved: {filename}");
+                }
+            }
+
+            CvInvoke.DestroyAllWindows(); // 全てのウィンドウを閉じる
+        }
+    }
+}
