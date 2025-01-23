@@ -1,0 +1,66 @@
+##patchcore????###
+
+import torch
+from anomalib.data import Folder
+from anomalib.models import Patchcore
+#from anomalib.trainers import Trainer
+from anomalib import TaskType
+from anomalib.engine import Engine
+
+# MPS?Apple GPU????????
+device = torch.device("cpu") #if torch.backends.mps.is_available() else "cpu"
+
+# ???????????
+DATASET_PATH = "/home/ken/Documents/rasp_anomalib/anomalib/datasets/my_sample"
+OUTPUT_PATH = "/home/ken/Documents/rasp_anomalib/anomalib/datasets/my_sample"
+
+# ???????????
+datamodule = Folder(
+    name="my_sample",
+    root="datasets/my_sample",
+    normal_dir="train/good",
+    abnormal_dir="test/ng",
+    #mask_dir="ground_truth",
+    normal_test_dir="test/good",
+    train_batch_size=32,
+    eval_batch_size=32,
+    task=TaskType.CLASSIFICATION,
+    #task=TaskType.SEGMENTATION,
+    #root=DATASET_PATH,
+    #normal_dir="train/OK",
+    #abnormal_dir="train/NG",
+    #image_size=(256, 256),  # ????????
+)
+datamodule.setup()
+
+# PatchCore??????
+model = Patchcore(
+    backbone="wide_resnet50_2",
+    layers=("layer2", "layer3"),
+    pre_trained=True,
+    coreset_sampling_ratio=0.1,
+    num_neighbors = 9
+    #input_size=(256, 256),  # ????????
+    #backbone="resnet18",    # ????????????
+    #pre_trained=True,       # ????????????
+).to(device)  # ????MPS???
+
+# ????????
+#trainer = Engine(
+engine = Engine(
+    max_epochs=50,  # ????????
+    accelerator="auto",  # ?????????????????MPS???????
+    devices=1,  # ????????
+    default_root_dir=OUTPUT_PATH,  # ??????
+)
+
+# ????
+engine.fit(model, datamodule)
+engine.test(datamodule=datamodule, model=model, verbose=True)
+#engine.test(datamodule=datamodule, model=model, ckpt_path=None, verbose=True)
+#predictions = engine.predict(datamodule=datamodule, model=model,  return_predictions=True)
+#predictions = engine.predict(
+#    datamodule=datamodule,
+#    model=model,
+#    ckpt_path="/Users/ken/Documents/ano_dev/anomalib/datasets/my_sample/Patchcore/my_sample/v4/weights/lightning/model.ckpt",
+#)

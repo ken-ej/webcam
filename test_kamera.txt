@@ -1,0 +1,71 @@
+"""anomalib検査システム kensa.py ver1.0
+    システム概要
+    1.main.py 役割：各システムを総合的に操作、コントロールを行う。
+    2.kensa.py 役割：webカメラを使用して画面に常に表示を行い、キーボードのSキーをトリガーに画像を撮影して保存する。
+      その画像をreturnでパスをinference.pyへ渡して推論の対象画像とする。
+      retrunで返すパスはinference..pyのdataへ渡す。
+      kensa_rasp_picam.py 役割：ラズパイ５でパイカメラを使った際のカメラ撮影システム
+      kemsa_rasp_usb.py 役割：ラズパイ５でUSBカメラを使った際のカメラ撮影システム
+    3.inference.py 役割：受け取った画像を元に推論を行う。    
+    """""
+
+import cv2
+import os
+from datetime import datetime
+
+def capture_image():
+    """
+    Webカメラを使用して画像をキャプチャし、保存パスを返す。
+    キーボードの 'S' を押すと画像を撮影する。
+    """
+
+    ################外部データーにしたい。################
+    output_dir = "./captured_images"
+    #################################################
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Webカメラを起動
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        raise RuntimeError("Web camera could not be opened.")
+
+    print("Sボタンで撮影。'Q'で終了。")
+
+    image_path = None
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Failed to grab frame.")
+            break
+
+        # 映像を表示
+        cv2.imshow("Camera Feed", frame)
+
+        # キーボード入力待機
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('s'):  # 'S'を押したら撮影
+            #時刻を名前にして保存する
+            now = datetime.now()
+            date_str = now.strftime("%Y%m%d%H%M%S")
+
+            # ファイルパスを生成
+            #image_name = "captured_image.jpg"
+            image_name = f"{date_str}.jpg"
+            image_path = os.path.join(output_dir, image_name)
+            cv2.imwrite(image_path, frame)
+            print(f"画像を{image_path}に保存しました。")
+            break
+        elif key == ord('q'):  # 'Q'で終了
+            print("カメラを終了します。")
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    if image_path is None and key == ord('q'):  # 'Q'で終了した場合はNoneを返す
+        return None
+
+    if image_path is None:
+        raise RuntimeError("No image was captured.")
+
+    return image_path,date_str

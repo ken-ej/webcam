@@ -1,0 +1,164 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import torch
+from anomalib.models import Patchcore
+from anomalib.engine import Engine
+import os
+import time  # 時間計測のためのモジュール
+
+# モデルとエンジンのグローバル変数
+model = None
+engine = None
+
+def initialize_backbone():
+    """モデルとエンジンの初期化を行う"""
+
+    #######エンジン設定ディレクトリ 将来的に外部パラメーターにしたい########
+    e_dir="/Users/ken/Documents/ano_dev/anomalib/captured_images/"
+    ###############################################################
+
+    # 処理の開始時間を記録
+    start_time = time.time()
+
+    global model, engine
+
+    # MPS（Apple GPU）を使用する設定
+    device = torch.device("mps") if torch.backends.mps.is_available() else "cpu"
+
+    # PatchCoreモデルの設定
+    model = Patchcore(
+        backbone="wide_resnet50_2",
+        layers=("layer2", "layer3"),
+        pre_trained=True,
+        coreset_sampling_ratio=0.1,
+        num_neighbors=9,
+    ).to(device)
+
+    # エンジンの設定
+    engine = Engine(default_root_dir = e_dir)
+    #engine = Engine(default_root_dir="/Users/ken/Documents/ano_dev/anomalib/captured_images/")
+    print("Backbone 初期化成功")
+
+    # 処理の終了時間を記録
+    end_time = time.time()
+
+    # 処理時間を計算
+    elapsed_time = end_time - start_time
+    print(f"backbone読み込み時間: {elapsed_time:.2f} 秒")
+
+def run_inference(image_path, date_str, output_dir="./results", threshold=0.5):
+
+    ########将来的に外部パラメーターにしたい。#############
+    model_ckpt="/Users/ken/Documents/ano_dev/anomalib/datasets/my_sample3/Patchcore/my_sample/v5/weights/lightning/model.ckpt" 
+    csv_dir = '/Users/ken/Documents/ano_dev/anomalib/.results/' 
+    ################################################
+
+    # 処理の開始時間を記録
+    start_time = time.time()
+    """
+    推論処理を実行し、結果をCSVに保存します。
+
+    Args:
+        image_path: 推論対象画像のパス。
+        output_dir: 結果を保存するディレクトリパス。
+        threshold: OK/NG判定の閾値。
+
+    Returns:
+        List[dict]: 推論結果のリスト。
+    """
+    global model, engine
+
+    if model is None or engine is None:
+        raise ValueError("モデルとエンジンを初期化出来ませんでした。バックボーンを読み直ししてください。")
+
+    # 推論を実行
+    predictions = engine.predict(
+        model=model,
+        #ckpt_path="/Users/ken/Documents/ano_dev/anomalib/datasets/my_sample3/Patchcore/my_sample/v5/weights/lightning/model.ckpt",
+        ckpt_path=model_ckpt,
+        data_path=image_path,  # image_path を data_path に渡す
+        #data_path="/Users/ken/Documents/ano_dev/anomalib/captured_images",
+        return_predictions=True
+    )
+    print("推論終了")
+
+    # 結果を DataFrame に変換
+    df = pd.DataFrame(predictions)
+    #print(df.columns)
+    #異常度
+    df["pred_scores"] = df["pred_scores"].apply(lambda x: x.item())
+    #規格前のknnの距離
+    df["org_anomaly_score"] = df["org_anomaly_score"].apply(lambda x: x.item())
+    #異常度マップをnumpy arrayに変換
+    #df["anomaly_maps"] = df["anomaly_maps"].apply(lambda x: np.array([[[b.item() for b in a] for a in z] for z in y] for y in x).squeeze())
+
+    # 結果を保存
+    #os.makedirs(output_dir, exist_ok=True)
+    save_df = df.loc[:, ("image_path", "pred_scores", "org_anomaly_score")]
+    #save_df.to_csv(f"{output_dir}/results.csv", index=False)
+
+    df["pred_scores"].plot.hist()
+
+    plt.savefig(f"{csv_dir}{date_str}fig.png")
+    save_df.to_csv(f"{csv_dir}{date_str}results.csv")
+    #plt.savefig('/Users/ken/Documents/ano_dev/anomalib/.results/' + "/fig.png")
+    #save_df.to_csv('/Users/ken/Documents/ano_dev/anomalib/.results/' + "/results.csv")
+
+    # ヒストグラムをプロット
+    df["pred_scores"].plot.hist()
+    plt.savefig(f"{csv_dir}{date_str}fig.png")
+    #plt.savefig(f"{output_dir}/fig.png")
+
+    # 結果CSVを読み込む
+    #results_csv = f"{output_dir}/results.csv"
+    #results_csv = '/Users/ken/Documents/ano_dev/anomalib/.results/results.csv'
+    results_csv = f"{csv_dir}{date_str}results.csv"
+    df = pd.read_csv(results_csv)
+
+    # 列名を確認
+    print(f"Columns in df: {df.columns}")
+
+    # 必要な列だけ取り出し、リスト化
+    results = []
+    for _, row in df.iterrows():
+        try:
+            image_path = row["image_path"]
+            pred_score = row["pred_scores"]
+            org_anomaly_score = row["org_anomaly_score"]
+            result = "NG" if pred_score > threshold else "OK"
+
+            # 結果を辞書形式で格納
+            results.append({
+                "Image Path": image_path,
+                "Pred Score": pred_score,
+                "Org Anomaly Score": org_anomaly_score,
+                "Result": result
+            })
+        except KeyError as e:
+            print(f"Missing column in row: {e}")
+
+    # 結果を表示
+    for idx, res in enumerate(results, start=0):
+        print(f"Image {idx}: {res['Image Path']}")
+        print(f"  Pred Score: {res['Pred Score']}")
+        print(f"  Org Anomaly Score: {res['Org Anomaly Score']}")
+        print(f"  Result: {res['Result']}")
+        print("-" * 20)
+
+    # 結果をCSVに保存
+    results_df = pd.DataFrame(results)
+    #results_df.to_csv("/Users/ken/Documents/ano_dev/anomalib/.results/processed_results.csv", index=False)
+    #results_df.to_csv(f"/Users/ken/Documents/ano_dev/anomalib/.results/processed_results{date_str}.csv", index=False)
+    results_df.to_csv(f"{csv_dir}processed_results{date_str}.csv", index=False)
+
+    print(f"processed_results.csvを{output_dir}に保存しました。")
+
+    # 処理の終了時間を記録
+    end_time = time.time()
+
+    # 処理時間を計算
+    elapsed_time = end_time - start_time
+    print(f"推論時間: {elapsed_time:.2f} 秒")
+
+    return results

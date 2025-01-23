@@ -1,0 +1,50 @@
+using System;
+using Cognex.VisionPro;
+using Cognex.VisionPro.DeepLearning;
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        try
+        {
+            // Blue Locateツールのロード
+            string toolFilePath = @"path_to_your_tool_file.vpp"; // Blue Locateツールが保存されたパス
+            CogToolBlock toolBlock = (CogToolBlock)CogSerializer.LoadObjectFromFile(toolFilePath);
+
+            // 入力画像の読み込み
+            string imagePath = @"path_to_your_image.bmp"; // 対象画像のパス
+            ICogImage inputImage = new CogImageFileBMP();
+            ((CogImageFileBMP)inputImage).Open(imagePath, CogImageFileModeConstants.Read);
+
+            // ツールに画像を設定
+            toolBlock.Inputs["InputImage"].Value = inputImage;
+
+            // Blue Locateツールの実行
+            toolBlock.Run();
+
+            // 結果の取得
+            var blueLocateResults = (CogDLBlueLocateResults)toolBlock.Outputs["BlueLocateResults"].Value;
+
+            if (blueLocateResults != null)
+            {
+                Console.WriteLine($"検出された物体数: {blueLocateResults.Count}");
+                for (int i = 0; i < blueLocateResults.Count; i++)
+                {
+                    var result = blueLocateResults[i];
+                    Console.WriteLine($"物体 {i + 1}:");
+                    Console.WriteLine($"  スコア: {result.Score}");
+                    Console.WriteLine($"  バウンディングボックス: X={result.BoundingBox.OriginX}, Y={result.BoundingBox.OriginY}, Width={result.BoundingBox.Width}, Height={result.BoundingBox.Height}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("物体が検出されませんでした。");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"エラー: {ex.Message}");
+        }
+    }
+}

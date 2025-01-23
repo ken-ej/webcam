@@ -1,0 +1,32 @@
+from test_kamera import capture_image
+from test_inference import initialize_backbone, run_inference
+
+
+# Backbone の初期化
+initialize_backbone()
+print("Patchcore検査システムスタート。'S'キーを押すと画像を保存し検査を行います。")
+
+def main():
+    """メイン処理"""
+
+    while True:
+        capture_result = capture_image()  # 別の変数に格納
+
+        if capture_result is None:  # 'Q'で終了した場合
+            print("検査システム終了します。")
+            break
+
+        # アンパックして画像パスと日付文字列を取得
+        image_path, date_str = capture_result
+        print(f"キャプチャー画像を {image_path}に保存しました。")
+
+        # 推論を実行
+        print("推論を開始します...")
+        result = run_inference(image_path,date_str)
+        print(f"推論結果: {result}")
+
+        print("次の撮影トリガーを待機中・・・ ('S'キーを押す)")
+
+
+if __name__ == "__main__":
+    main()
